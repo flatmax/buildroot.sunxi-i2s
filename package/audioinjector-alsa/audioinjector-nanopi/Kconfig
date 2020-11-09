@@ -1,0 +1,6 @@
+config SND_SOC_AUDIOINJECTOR_NANOPI_NEO
+        tristate "Audio Injector NanoPi Neo platform machine driver"
+        select SND_SOC_WM8731
+        default n
+        help
+          Audio Injector ALSA machine driver for the NanoPi Neo platform.

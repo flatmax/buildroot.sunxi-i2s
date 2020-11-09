@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) 2018 FriendlyElec Computer Tech. Co., Ltd.
+ * (http://www.friendlyarm.com)
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/dts-v1/;
+#include "sun8i-h3-nanopi.dtsi"
+
+/ {
+	model = "Audio Injector stereo";
+  compatible = "friendlyarm,nanopi-neo", "allwinner,sun8i-h3";
+
+  i2c3: i2c {
+          compatible = "i2c-gpio";
+          sda-gpios = <&pio 6 12 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* PA17 */
+          scl-gpios = <&pio 6 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>; /* PL11 */
+          i2c-gpio,delay-us = <5>;
+  };
+
+  sound {
+    compatible = "ai,audioinjector-nanopi-soundcard";
+//  	pinctrl-names = "default";
+//  	pinctrl-0 = <&i2s0_pins>;
+    nanopi,audio-codec = <&wm8731>;
+  };
+
+};
+
+&ehci0 {
+	status = "okay";
+};
+
+&emac {
+	phy-handle = <&int_mii_phy>;
+	phy-mode = "mii";
+	allwinner,leds-active-low;
+	status = "okay";
+};
+
+&ohci0 {
+	status = "okay";
+};
+
+&usb_otg {
+	status = "okay";
+	dr_mode = "peripheral";
+};
+
+&usbphy {
+	usb0_id_det-gpios = <&pio 6 12 GPIO_ACTIVE_HIGH>; /* PG12 */
+};
+
+&i2c3 {
+	status = "okay";
+  wm8731: wm8731@1a {
+          #sound-dai-cells = <0>;
+          compatible = "wlf,wm8731";
+          reg = <0x1a>;
+          status = "okay";
+  };
+};
+
+&i2s0 {
+//	pinctrl-names = "default";
+//	pinctrl-0 = <&i2s0_pins>;
+	status = "okay";
+};

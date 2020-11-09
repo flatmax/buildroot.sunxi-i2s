@@ -1,0 +1,4 @@
+menu "Packages"
+source "$BR2_EXTERNAL_NEO_PATH/package/gtkiostream/Config.in"
+source "$BR2_EXTERNAL_NEO_PATH/package/audioinjector-alsa/Config.in"
+endmenu

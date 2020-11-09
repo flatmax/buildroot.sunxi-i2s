@@ -1,0 +1,7 @@
+config BR2_PACKAGE_AUDIOINJECTOR_ALSA
+	bool "audioinjector-alsa"
+	depends on BR2_LINUX_KERNEL
+	help
+	  Audio Injector ALSA machine driver
+
+	  http://www.audioinjector.net

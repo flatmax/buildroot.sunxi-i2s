@@ -1,0 +1,27 @@
+To rebuild the modules or kernel and have depmod auto run for you :
+rm -rf output/build/audioinjector-alsa* output/build/linux-nanopi4-linux-v4.4.y/.stamp_built output/build/linux-nanopi4-linux-v4.4.y/.stamp_target_installed output/build/linux-nanopi4-linux-v4.4.y/.stamp_images_installed; make
+
+echo '7777777' | spi-pipe -d /dev/spidev1.0 -s 10000
+
+mount -t debugfs debugfs /sys/kernel/debug
+
+# ls /sys/class/gpio/
+export       gpiochip0    gpiochip32   gpiochip96
+gpio156      gpiochip128  gpiochip64   unexport
+
+echo 39 > /sys/class/gpio/export
+echo 41 > /sys/class/gpio/export
+echo 42 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio39/direction
+echo out > /sys/class/gpio/gpio41/direction
+echo out > /sys/class/gpio/gpio42/direction
+
+echo 0 > /sys/class/gpio/gpio39/value
+echo 0 > /sys/class/gpio/gpio41/value
+echo 0 > /sys/class/gpio/gpio42/value
+
+cat /sys/kernel/debug/pinctrl/pinctrl/pinmux-pins | less
+pin 39 (gpio1-7): ff1d0000.spi (GPIO UNCLAIMED) function spi1 group spi1-rx
+pin 40 (gpio1-8): ff1d0000.spi (GPIO UNCLAIMED) function spi1 group spi1-tx
+pin 41 (gpio1-9): ff1d0000.spi gpio1:41 function spi1 group spi1-clk
+pin 42 (gpio1-10): ff1d0000.spi gpio1:42 function spi1 group spi1-cs0
