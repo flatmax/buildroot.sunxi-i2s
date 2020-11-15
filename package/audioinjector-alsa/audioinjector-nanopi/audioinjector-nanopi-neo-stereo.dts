@@ -34,6 +34,7 @@
     compatible = "ai,audioinjector-nanopi-soundcard";
 //  	pinctrl-names = "default";
 //  	pinctrl-0 = <&i2s0_pins>;
+    i2s-controller = <&i2s0>;
     nanopi,audio-codec = <&wm8731>;
   };
 

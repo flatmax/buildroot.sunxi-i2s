@@ -26,7 +26,7 @@
 #include <sound/pcm_params.h>
 #include <sound/control.h>
 
-#include "../codecs/wm8731.h"
+#include "../sound/soc/codecs/wm8731.h"
 
 static const unsigned int bcm2835_rates_12000000[] = {
 	8000, 16000, 32000, 44100, 48000, 96000, 88200,
@@ -84,9 +84,9 @@ static int audioinjector_nanopi_soundcard_dai_init(struct snd_soc_pcm_runtime *r
 }
 
 SND_SOC_DAILINK_DEFS(audioinjector_nanopi,
-	DAILINK_COMP_ARRAY(COMP_CPU("bcm2708-i2s.0")),
+	DAILINK_COMP_ARRAY(COMP_CPU("sun4i-i2s.0")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("wm8731.1-001a", "wm8731-hifi")),
-	DAILINK_COMP_ARRAY(COMP_PLATFORM("bcm2835-i2s.0")));
+	DAILINK_COMP_ARRAY(COMP_PLATFORM("sun4i-i2s.0")));
 
 static struct snd_soc_dai_link audioinjector_nanopi_soundcard_dai[] = {
 	{
