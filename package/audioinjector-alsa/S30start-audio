@@ -1,0 +1,26 @@
+#!/bin/sh
+
+case "$1" in
+    start)
+        echo "loading audio modules"
+        export MODS=`cat /etc/modules`
+        for m in $MODS; do
+          modprobe $m
+        done
+        ;;
+
+    stop)
+        echo "unloading audio modules"
+        export MODS=`cat /etc/modules`
+        for m in $MODS; do
+          rmmod $m
+        done
+        ;;
+
+    *)
+        echo "Usage: $0 start"
+        exit 1
+        ;;
+esac
+
+exit $?

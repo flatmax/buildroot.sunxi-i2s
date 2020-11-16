@@ -80,13 +80,18 @@ static struct snd_soc_ops snd_audioinjector_nanopi_soundcard_ops = {
 
 static int audioinjector_nanopi_soundcard_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
+	printk("audioinjector_nanopi_soundcard_dai_init\n");
 	return snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12000000, SND_SOC_CLOCK_IN);
 }
 
 SND_SOC_DAILINK_DEFS(audioinjector_nanopi,
-	DAILINK_COMP_ARRAY(COMP_CPU("sun4i-i2s.0")),
-	DAILINK_COMP_ARRAY(COMP_CODEC("wm8731.1-001a", "wm8731-hifi")),
-	DAILINK_COMP_ARRAY(COMP_PLATFORM("sun4i-i2s.0")));
+	// DAILINK_COMP_ARRAY(COMP_CPU("sun4i-i2s.0")),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()),
+
+	DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "wm8731-hifi")),
+
+	// DAILINK_COMP_ARRAY(COMP_PLATFORM("sun4i-i2s.0")));
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 
 static struct snd_soc_dai_link audioinjector_nanopi_soundcard_dai[] = {
 	{
@@ -94,6 +99,7 @@ static struct snd_soc_dai_link audioinjector_nanopi_soundcard_dai[] = {
 		.stream_name = "AudioInjector audio",
 		.ops = &snd_audioinjector_nanopi_soundcard_ops,
 		.init = audioinjector_nanopi_soundcard_dai_init,
+		// .dai_fmt = SND_SOC_DAIFMT_CBM_CFM|SND_SOC_DAIFMT_I2S|SND_SOC_DAIFMT_NB_NF,
 		.dai_fmt = SND_SOC_DAIFMT_CBM_CFM|SND_SOC_DAIFMT_I2S|SND_SOC_DAIFMT_NB_NF,
 		SND_SOC_DAILINK_REG(audioinjector_nanopi),
 	},
@@ -140,23 +146,34 @@ static int audioinjector_nanopi_soundcard_probe(struct platform_device *pdev)
 
 	card->dev = &pdev->dev;
 
-	if (pdev->dev.of_node) {
-		struct snd_soc_dai_link *dai = &audioinjector_nanopi_soundcard_dai[0];
-		struct device_node *i2s_node = of_parse_phandle(pdev->dev.of_node,
-								"i2s-controller", 0);
-
-		if (i2s_node) {
-			dai->cpus->dai_name = NULL;
-			dai->cpus->of_node = i2s_node;
-			dai->platforms->name = NULL;
-			dai->platforms->of_node = i2s_node;
-		} else
-			if (!dai->cpus->of_node) {
-				dev_err(&pdev->dev, "Property 'i2s-controller' missing or invalid\n");
-				return -EINVAL;
-			}
+	printk("before of_node\n");
+	if (!pdev->dev.of_node){
+		dev_err(&pdev->dev, "of_node not present\n");
+		return -EINVAL;
 	}
 
+	struct snd_soc_dai_link *dai = &audioinjector_nanopi_soundcard_dai[0];
+	struct device_node *i2s_node = of_parse_phandle(pdev->dev.of_node,
+							"i2s-controller", 0);
+
+	printk("i2s_node %p\n",i2s_node);
+
+	if (i2s_node) {
+		dai->cpus->of_node = i2s_node;
+		dai->platforms->of_node = i2s_node;
+	} else {
+		dev_err(&pdev->dev, "Property 'i2s-controller' missing or invalid\n");
+		return -EINVAL;
+	}
+
+	dai->codecs->of_node = of_parse_phandle(pdev->dev.of_node,
+			"nanopi,audio-codec", 0);
+	if (!dai->codecs->of_node) {
+		dev_err(&pdev->dev, "Property 'nanopi,audio-codec' missing or invalid\n");
+		return -EINVAL;
+	}
+
+	printk("after of_node\n");
 	if ((ret = devm_snd_soc_register_card(&pdev->dev, card))) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
 	}
@@ -170,16 +187,16 @@ static const struct of_device_id audioinjector_nanopi_soundcard_of_match[] = {
 MODULE_DEVICE_TABLE(of, audioinjector_nanopi_soundcard_of_match);
 
 static struct platform_driver audioinjector_nanopi_soundcard_driver = {
-       .driver         = {
+	.driver         = {
 		.name   = "audioinjector-stereo",
 		.owner  = THIS_MODULE,
 		.of_match_table = audioinjector_nanopi_soundcard_of_match,
-       },
-       .probe          = audioinjector_nanopi_soundcard_probe,
+	},
+	.probe          = audioinjector_nanopi_soundcard_probe,
 };
 
 module_platform_driver(audioinjector_nanopi_soundcard_driver);
 MODULE_AUTHOR("Matt Flax <flatmax@flatmax.org>");
 MODULE_DESCRIPTION("AudioInjector.net Neo Soundcard");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:audioinjector-nanopi-neo-soundcard");
+MODULE_ALIAS("platform:audioinjector-nanopi-neo-stereo");
