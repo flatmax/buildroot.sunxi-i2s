@@ -52,24 +52,25 @@ static int snd_audioinjector_nanopi_soundcard_hw_params(struct snd_pcm_substream
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 
-	switch (params_rate(params)){
-		case 8000:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 1);
-		case 16000:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 750);
-		case 32000:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 375);
-		case 44100:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 272);
-		case 48000:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 250);
-		case 88200:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 136);
-		case 96000:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 125);
-		default:
-			return snd_soc_dai_set_bclk_ratio(cpu_dai, 125);
-	}
+	// switch (params_rate(params)){
+	// 	case 8000:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 1);
+	// 	case 16000:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 750);
+	// 	case 32000:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 375);
+	// 	case 44100:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 272);
+	// 	case 48000:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 250);
+	// 	case 88200:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 136);
+	// 	case 96000:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 125);
+	// 	default:
+	// 		return snd_soc_dai_set_bclk_ratio(cpu_dai, 125);
+	// }
+	return 0;
 }
 
 /* machine stream operations */
@@ -81,7 +82,8 @@ static struct snd_soc_ops snd_audioinjector_nanopi_soundcard_ops = {
 static int audioinjector_nanopi_soundcard_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
 	printk("audioinjector_nanopi_soundcard_dai_init\n");
-	return snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12000000, SND_SOC_CLOCK_IN);
+	// return snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12000000, SND_SOC_CLOCK_IN);
+	return snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12288000, SND_SOC_CLOCK_IN);
 }
 
 SND_SOC_DAILINK_DEFS(audioinjector_nanopi,
