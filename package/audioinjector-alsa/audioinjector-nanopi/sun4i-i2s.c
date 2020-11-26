@@ -192,6 +192,7 @@ struct sun4i_i2s {
 	struct regmap_field	*field_rxchansel;
 
 	const struct sun4i_i2s_quirks	*variant;
+	bool codec_is_bus_master;
 };
 
 struct sun4i_i2s_clk_div {
@@ -269,6 +270,21 @@ static bool sun4i_i2s_oversample_is_valid(unsigned int oversample)
 	return false;
 }
 
+static int sun4i_i2s_set_dai_bclk_ratio(struct snd_soc_dai *dai,
+				      unsigned int ratio)
+{
+	struct sun4i_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+	printk("sun4i_i2s_set_dai_bclk_ratio %d\n", ratio);
+	/* Set sync period */
+	if (i2s->variant->has_fmt_set_lrck_period){
+		regmap_update_bits(i2s->regmap, SUN4I_I2S_FMT0_REG,
+					 SUN8I_I2S_FMT0_LRCK_PERIOD_MASK,
+					 SUN8I_I2S_FMT0_LRCK_PERIOD(ratio/2));
+		printk("regmap_update_bits with LRCK_PERIOD %d\n", ratio/2);
+ }
+	return 0;
+}
+
 static int sun4i_i2s_set_clk_rate(struct snd_soc_dai *dai,
 				  unsigned int rate,
 				  unsigned int word_size)
@@ -278,77 +294,71 @@ static int sun4i_i2s_set_clk_rate(struct snd_soc_dai *dai,
 	int bclk_div, mclk_div;
 	int ret;
 
-	// switch (rate) {
-	// case 176400:
-	// case 88200:
-	// case 44100:
-	// case 22050:
-	// case 11025:
-	// 	clk_rate = 22579200;
-	// 	break;
-	//
-	// case 192000:
-	// case 128000:
-	// case 96000:
-	// case 64000:
-	// case 48000:
-	// case 32000:
-	// case 24000:
-	// case 16000:
-	// case 12000:
-	// case 8000:
-	// 	clk_rate = 24576000;
-	// 	break;
-	//
-	// default:
-	// 	dev_err(dai->dev, "Unsupported sample rate: %u\n", rate);
-	// 	return -EINVAL;
-	// }
-	//
-	// ret = clk_set_rate(i2s->mod_clk, clk_rate);
-	// if (ret)
-	// 	return ret;
-	//
-	// oversample_rate = i2s->mclk_freq / rate;
-	// if (!sun4i_i2s_oversample_is_valid(oversample_rate)) {
-	// 	dev_err(dai->dev, "Unsupported oversample rate: %d\n",
-	// 		oversample_rate);
-	// 	return -EINVAL;
-	// }
-	//
-	// printk("i2s->mclk_freq %d rate %d word_size %d\n",i2s->mclk_freq, rate, word_size);
-	// bclk_div = sun4i_i2s_get_bclk_div(i2s, i2s->mclk_freq,
-	// 				  rate, word_size);
-	// if (bclk_div < 0) {
-	// 	dev_err(dai->dev, "Unsupported BCLK divider: %d\n", bclk_div);
-	// 	return -EINVAL;
-	// }
-	// printk("bclk_div %d\n",bclk_div);
-	//
-	// printk("oversample_rate %d clk_rate %d rate %d\n",i2s->mclk_freq, oversample_rate, clk_rate, rate);
-	// mclk_div = sun4i_i2s_get_mclk_div(i2s, oversample_rate,
-	// 				  clk_rate, rate);
-	// if (mclk_div < 0) {
-	// 	dev_err(dai->dev, "Unsupported MCLK divider: %d\n", mclk_div);
-	// 	return -EINVAL;
-	// }
-	// printk("mclk_div %d\n",mclk_div);
-	//
-	// /* Adjust the clock division values if needed */
-	// bclk_div += i2s->variant->bclk_offset;
-	// mclk_div += i2s->variant->mclk_offset;
-	//
-	// regmap_write(i2s->regmap, SUN4I_I2S_CLK_DIV_REG,
-	// 	     SUN4I_I2S_CLK_DIV_BCLK(bclk_div) |
-	// 	     SUN4I_I2S_CLK_DIV_MCLK(mclk_div));
-	//
-	// regmap_field_write(i2s->field_clkdiv_mclk_en, 1);
+	switch (rate) {
+	case 176400:
+	case 88200:
+	case 44100:
+	case 22050:
+	case 11025:
+		clk_rate = 22579200;
+		break;
 
-	/* Set sync period */
-	if (i2s->variant->has_fmt_set_lrck_period)
-		regmap_update_bits(i2s->regmap, SUN4I_I2S_FMT0_REG,
-				   SUN8I_I2S_FMT0_LRCK_PERIOD_MASK,
-				   SUN8I_I2S_FMT0_LRCK_PERIOD(32));
+	case 192000:
+	case 128000:
+	case 96000:
+	case 64000:
+	case 48000:
+	case 32000:
+	case 24000:
+	case 16000:
+	case 12000:
+	case 8000:
+		clk_rate = 24576000;
+		break;
+
+	default:
+		dev_err(dai->dev, "Unsupported sample rate: %u\n", rate);
+		return -EINVAL;
+	}
+
+	ret = clk_set_rate(i2s->mod_clk, clk_rate);
+	if (ret)
+		return ret;
+
+	oversample_rate = i2s->mclk_freq / rate;
+	if (!sun4i_i2s_oversample_is_valid(oversample_rate)) {
+		dev_err(dai->dev, "Unsupported oversample rate: %d\n",
+			oversample_rate);
+		return -EINVAL;
+	}
+
+	printk("i2s->mclk_freq %d rate %d word_size %d\n",i2s->mclk_freq, rate, word_size);
+	bclk_div = sun4i_i2s_get_bclk_div(i2s, i2s->mclk_freq,
+					  rate, word_size);
+	if (bclk_div < 0) {
+		dev_err(dai->dev, "Unsupported BCLK divider: %d\n", bclk_div);
+		return -EINVAL;
+	}
+	printk("bclk_div %d\n",bclk_div);
+
+	printk("oversample_rate %d clk_rate %d rate %d\n", oversample_rate, clk_rate, rate);
+	mclk_div = sun4i_i2s_get_mclk_div(i2s, oversample_rate,
+					  clk_rate, rate);
+	if (mclk_div < 0) {
+		dev_err(dai->dev, "Unsupported MCLK divider: %d\n", mclk_div);
+		return -EINVAL;
+	}
+	printk("mclk_div %d\n",mclk_div);
+
+	/* Adjust the clock division values if needed */
+	bclk_div += i2s->variant->bclk_offset;
+	mclk_div += i2s->variant->mclk_offset;
+
+	regmap_write(i2s->regmap, SUN4I_I2S_CLK_DIV_REG,
+		     SUN4I_I2S_CLK_DIV_BCLK(bclk_div) |
+		     SUN4I_I2S_CLK_DIV_MCLK(mclk_div));
+
+	regmap_field_write(i2s->field_clkdiv_mclk_en, 1);
 
 	return 0;
 }
@@ -450,44 +460,29 @@ static int sun4i_i2s_hw_params(struct snd_pcm_substream *substream,
 	regmap_field_write(i2s->field_fmt_wss, wss);
 	regmap_field_write(i2s->field_fmt_sr, sr);
 
-	i2s->mclk_freq=12288000;
-	// regmap_write(i2s->regmap, SUN4I_I2S_CLK_DIV_REG,
-	// 	     SUN4I_I2S_CLK_DIV_BCLK(3) |
-	// 	     SUN4I_I2S_CLK_DIV_MCLK(1));
+	// i2s->mclk_freq=12288000;
+	if (!i2s->codec_is_bus_master) // SoC is I2S bus master
+		return sun4i_i2s_set_clk_rate(dai, params_rate(params),
+				params_width(params));
 
-	// regmap_field_write(i2s->field_clkdiv_mclk_en, 1);
-
-	// /* Set sync period */
-	// if (i2s->variant->has_fmt_set_lrck_period)
-	// 	regmap_update_bits(i2s->regmap, SUN4I_I2S_FMT0_REG,
-	// 			   SUN8I_I2S_FMT0_LRCK_PERIOD_MASK,
-	// 			   SUN8I_I2S_FMT0_LRCK_PERIOD(32));
-
- // regmap_update_bits(i2s->regmap, SUN4I_I2S_CTRL_REG,
- // 			 SUN4I_I2S_CTRL_SDO_EN_MASK,
- // 			 SUN4I_I2S_CTRL_SDO_EN(1));
-	// return 0;
-	ret= sun4i_i2s_set_clk_rate(dai, params_rate(params),
-				      params_width(params));
-
-	/* Enable the first output line */
+	// Enable the first output line
 	regmap_update_bits(i2s->regmap, SUN4I_I2S_CTRL_REG,
 			   SUN4I_I2S_CTRL_SDO_EN_MASK,
 			   SUN4I_I2S_CTRL_SDO_EN(0));
 
-	/* COOPS DEBUGGING FOR NOW */
-	u32 reg_val = 0;
-
-	printk("COOPS %s . Setting the following registers.\n", __func__);
-	regmap_read(i2s->regmap, SUN4I_I2S_CTRL_REG, &reg_val);
-	printk("SUN4I_I2S_CTRL_REG 0x%x\n", reg_val);
-	regmap_read(i2s->regmap, SUN4I_I2S_FMT0_REG, &reg_val);
-	printk("SUN4I_I2S_FMT0_REG 0x%x\n", reg_val);
-	regmap_read(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG, &reg_val);
-	printk("SUN4I_I2S_FIFO_CTRL_REG 0x%x\n", reg_val);
-	regmap_read(i2s->regmap, SUN8I_I2S_TX_CHAN_SEL_REG, &reg_val);
-	printk("SUN8I_I2S_TX_CHAN_SEL_REG 0x%x\n", reg_val);
-	return ret;
+	// /* COOPS DEBUGGING FOR NOW */
+	// u32 reg_val = 0;
+	//
+	// printk("COOPS %s . Setting the following registers.\n", __func__);
+	// regmap_read(i2s->regmap, SUN4I_I2S_CTRL_REG, &reg_val);
+	// printk("SUN4I_I2S_CTRL_REG 0x%x\n", reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_FMT0_REG, &reg_val);
+	// printk("SUN4I_I2S_FMT0_REG 0x%x\n", reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG, &reg_val);
+	// printk("SUN4I_I2S_FIFO_CTRL_REG 0x%x\n", reg_val);
+	// regmap_read(i2s->regmap, SUN8I_I2S_TX_CHAN_SEL_REG, &reg_val);
+	// printk("SUN8I_I2S_TX_CHAN_SEL_REG 0x%x\n", reg_val);
+	return 0;
 }
 
 static int sun4i_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
@@ -574,10 +569,12 @@ static int sun4i_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		case SND_SOC_DAIFMT_CBS_CFS:
 			/* BCLK and LRCLK master */
 			val = SUN4I_I2S_CTRL_MODE_MASTER;
+			i2s->codec_is_bus_master = false;
 			break;
 		case SND_SOC_DAIFMT_CBM_CFM:
 			/* BCLK and LRCLK slave */
 			val = SUN4I_I2S_CTRL_MODE_SLAVE;
+			i2s->codec_is_bus_master = true;
 			break;
 		default:
 			dev_err(dai->dev, "Unsupported slave setting: %d\n",
@@ -598,11 +595,13 @@ static int sun4i_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 			/* BCLK and LRCLK master */
 			val = SUN8I_I2S_CTRL_BCLK_OUT |
 				SUN8I_I2S_CTRL_LRCK_OUT;
+			i2s->codec_is_bus_master = false;
 			break;
 		case SND_SOC_DAIFMT_CBM_CFM:
 		printk("setting up master\n");
 			/* BCLK and LRCLK slave */
 			val = 0;
+			i2s->codec_is_bus_master = true;
 			break;
 		default:
 			dev_err(dai->dev, "Unsupported slave setting: %d\n",
@@ -755,6 +754,7 @@ static const struct snd_soc_dai_ops sun4i_i2s_dai_ops = {
 	.set_fmt	= sun4i_i2s_set_fmt,
 	.set_sysclk	= sun4i_i2s_set_sysclk,
 	.trigger	= sun4i_i2s_trigger,
+	.set_bclk_ratio	= sun4i_i2s_set_dai_bclk_ratio,
 };
 
 static int sun4i_i2s_dai_probe(struct snd_soc_dai *dai)
