@@ -81,9 +81,12 @@ static struct snd_soc_ops snd_audioinjector_nanopi_soundcard_ops = {
 
 static int audioinjector_nanopi_soundcard_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
+	int ret = snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12288000, SND_SOC_CLOCK_IN);
 	printk("audioinjector_nanopi_soundcard_dai_init\n");
 	// return snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12000000, SND_SOC_CLOCK_IN);
-	return snd_soc_dai_set_sysclk(rtd->codec_dai, WM8731_SYSCLK_XTAL, 12288000, SND_SOC_CLOCK_IN);
+	if (ret==0)
+		return snd_soc_dai_set_bclk_ratio(rtd->cpu_dai, 64);
+	return ret;
 }
 
 SND_SOC_DAILINK_DEFS(audioinjector_nanopi,
