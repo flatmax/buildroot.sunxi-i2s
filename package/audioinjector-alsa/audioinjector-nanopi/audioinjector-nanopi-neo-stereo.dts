@@ -23,11 +23,11 @@
 	model = "Audio Injector stereo";
   compatible = "friendlyarm,nanopi-neo", "allwinner,sun8i-h3";
 
-  i2c@0 {
+  /* i2c@0 {
           compatible = "i2c-gpio";
-          sda-gpios = <&pio 0 17 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; /* PA17 */
-          scl-gpios = <&r_pio 0 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; /* PL11 */
-          i2c-gpio,delay-us = <5>;
+          sda-gpios = <&pio 0 17 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // PA17
+          scl-gpios = <&r_pio 0 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // PL11
+          i2c-gpio,delay-us = <50>;
 
           #address-cells = <1>;
           #size-cells = <0>;
@@ -37,17 +37,28 @@
                   reg = <0x1a>;
                   status = "okay";
           };
-  };
+  }; */
 
   sound {
     compatible = "ai,audioinjector-nanopi-soundcard";
-//  	pinctrl-names = "default";
-//  	pinctrl-0 = <&i2s0_pins>;
+  	/* pinctrl-names = "default";
+  	pinctrl-0 = <&i2s0_pins>; */
     i2s-controller = <&i2s0>;
     nanopi,audio-codec = <&wm8731>;
     status = "okay";
   };
 
+};
+
+&i2c0 {
+		status = "okay";
+
+		wm8731: wm8731@1a {
+						#sound-dai-cells = <0>;
+						compatible = "wlf,wm8731";
+						reg = <0x1a>;
+						status = "okay";
+		};
 };
 
 &ehci0 {
@@ -74,9 +85,20 @@
 	usb0_id_det-gpios = <&pio 6 12 GPIO_ACTIVE_HIGH>; // PG12
 };
 
+&pio {
+	i2s0_pins: i2s0-pins {
+		pins = "PA18", "PA19", "PA20", "PA21";
+		function = "i2s0";
+	};
+	i2s1_pins: i2s1-pins {
+		pins = "PG10", "PG11", "PG12", "PG13";
+		function = "i2s1";
+	};
+};
+
 &i2s0 {
-//	pinctrl-names = "default";
-//	pinctrl-0 = <&i2s0_pins>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s0_pins>;
 
   compatible = "allwinner,sun8i-h3-i2s";
 	status = "okay";
