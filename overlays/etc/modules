@@ -1,4 +1,12 @@
 i2c-gpio
-sun4i-i2s
+snd
+snd_timer
+snd_pcm
+snd_pcm_dmaengine
+snd_soc_core
 snd-soc-wm8731
+sun4i-i2s
 snd-soc-audioinjector-nanopi-neo-stereo
+
+#rmmod snd-soc-audioinjector-nanopi-neo-stereo snd-soc-wm8731 sun4i-i2s snd_soc_core snd_pcm_dmaengine snd_pcm snd_timer snd
+#rmmod snd-soc-audioinjector-nanopi-neo-stereo snd-soc-wm8731 sun4i-i2s
