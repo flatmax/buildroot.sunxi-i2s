@@ -401,13 +401,16 @@ static int sun4i_i2s_hw_params(struct snd_pcm_substream *substream,
 			       struct snd_soc_dai *dai)
 {
 	struct sun4i_i2s *i2s = snd_soc_dai_get_drvdata(dai);
-	int sr, wss, channels, ret;
+	int sr, wss, channels;
 	u32 width;
 
-	printk("sun4i_i2s_hw_params\n");
+	printk("COOPS %s channels is %d, physical width is %d, width is %d, rate is %d, period size is %d\n",
+		__func__, params_channels(params), params_physical_width(params), params_width(params),
+		params_rate(params), params_period_size(params));
 
 	channels = params_channels(params);
-	if (channels != 2) {
+	if ((channels > dai->driver->playback.channels_max) ||
+		(channels < dai->driver->playback.channels_min)) {
 		dev_err(dai->dev, "Unsupported number of channels: %d\n",
 			channels);
 		return -EINVAL;
@@ -441,6 +444,23 @@ static int sun4i_i2s_hw_params(struct snd_pcm_substream *substream,
 	switch (params_physical_width(params)) {
 	case 16:
 		width = DMA_SLAVE_BUSWIDTH_2_BYTES;
+		/* Set significant bits in our FIFOs */
+		regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
+					 SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
+					 SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
+					 SUN4I_I2S_FIFO_CTRL_TX_MODE(1) |
+					 SUN4I_I2S_FIFO_CTRL_RX_MODE(1));
+
+		break;
+	case 24:
+	case 32:
+		width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+		/* Set significant bits in our FIFOs */
+		regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
+				   SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
+				   SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
+				   SUN4I_I2S_FIFO_CTRL_TX_MODE(0) |
+				   SUN4I_I2S_FIFO_CTRL_RX_MODE(0));
 		break;
 	default:
 		dev_err(dai->dev, "Unsupported physical sample width: %d\n",
@@ -460,7 +480,6 @@ static int sun4i_i2s_hw_params(struct snd_pcm_substream *substream,
 	regmap_field_write(i2s->field_fmt_wss, wss);
 	regmap_field_write(i2s->field_fmt_sr, sr);
 
-	// i2s->mclk_freq=12288000;
 	if (!i2s->codec_is_bus_master) // SoC is I2S bus master
 		return sun4i_i2s_set_clk_rate(dai, params_rate(params),
 				params_width(params));
@@ -614,12 +633,12 @@ static int sun4i_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 				   val);
 	}
 
-	/* Set significant bits in our FIFOs */
-	regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
-			   SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
-			   SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
-			   SUN4I_I2S_FIFO_CTRL_TX_MODE(1) |
-			   SUN4I_I2S_FIFO_CTRL_RX_MODE(1));
+	// /* Set significant bits in our FIFOs */
+	// regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
+	// 		   SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
+	// 		   SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
+	// 		   SUN4I_I2S_FIFO_CTRL_TX_MODE(1) |
+	// 		   SUN4I_I2S_FIFO_CTRL_RX_MODE(1));
 
 	 /* COOPS DEBUGGING FOR NOW */
  	u32 reg_val = 0;
@@ -732,6 +751,34 @@ static int sun4i_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 	default:
 		return -EINVAL;
 	}
+	// {
+	// // COOPS DEBUGGING FOR NOW
+	// u32 reg_val = 0;
+	//
+	// printk("I2S Command State %d Audio Clock is %lu\n", cmd, clk_get_rate(i2s->mod_clk));
+	// regmap_read(i2s->regmap, SUN4I_I2S_CTRL_REG, &reg_val);
+	// printk("SUN4I_I2S_CTRL_REG 0x%x 0x%x\n", SUN4I_I2S_CTRL_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_FMT0_REG, &reg_val);
+	// printk("SUN4I_I2S_FMT0_REG 0x%x 0x%x\n", SUN4I_I2S_FMT0_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_FMT1_REG, &reg_val);
+	// printk("SUN4I_I2S_FMT1_REG 0x%x 0x%x\n", SUN4I_I2S_FMT1_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG, &reg_val);
+	// printk("SUN4I_I2S_FIFO_CTRL_REG 0x%x 0x%x\n", SUN4I_I2S_FIFO_CTRL_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_CLK_DIV_REG, &reg_val);
+	// printk("SUN4I_I2S_CLK_DIV_REG 0x%x 0x%x\n", SUN4I_I2S_CLK_DIV_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_FIFO_STA_REG, &reg_val);
+	// printk("SUN4I_I2S_FIFO_STA_REG 0x%x 0x%x\n", SUN4I_I2S_FIFO_STA_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_TX_CHAN_SEL_REG, &reg_val);
+	// printk("SUN4I_I2S_TX_CHAN_SEL_REG 0x%x 0x%x\n", SUN4I_I2S_TX_CHAN_SEL_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN4I_I2S_TX_CHAN_MAP_REG, &reg_val);
+	// printk("SUN4I_I2S_TX_CHAN_MAP_REG 0x%x 0x%x\n", SUN4I_I2S_TX_CHAN_MAP_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN8I_I2S_TX_CHAN_MAP_REG, &reg_val);
+	// printk("SUN8I_I2S_TX_CHAN_MAP_REG 0x%x 0x%x\n", SUN8I_I2S_TX_CHAN_MAP_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN8I_I2S_RX_CHAN_SEL_REG, &reg_val);
+	// printk("SUN8I_I2S_RX_CHAN_SEL_REG 0x%x 0x%x\n", SUN8I_I2S_RX_CHAN_SEL_REG, reg_val);
+	// regmap_read(i2s->regmap, SUN8I_I2S_RX_CHAN_MAP_REG, &reg_val);
+	// printk("SUN8I_I2S_RX_CHAN_MAP_REG 0x%x 0x%x\n", SUN8I_I2S_RX_CHAN_MAP_REG, reg_val);
+	// }
 
 	return 0;
 }
@@ -777,14 +824,14 @@ static struct snd_soc_dai_driver sun4i_i2s_dai = {
 		.channels_min = 2,
 		.channels_max = 2,
 		.rates = SNDRV_PCM_RATE_8000_192000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE),
 	},
 	.playback = {
 		.stream_name = "Playback",
 		.channels_min = 2,
 		.channels_max = 2,
 		.rates = SNDRV_PCM_RATE_8000_192000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE),
 	},
 	.ops = &sun4i_i2s_dai_ops,
 	.symmetric_rates = 1,
@@ -1201,8 +1248,7 @@ static int sun4i_i2s_probe(struct platform_device *pdev)
 		}
 	}
 
-	i2s->playback_dma_data.addr = res->start +
-					i2s->variant->reg_offset_txdata;
+	i2s->playback_dma_data.addr = res->start + i2s->variant->reg_offset_txdata;
 	i2s->playback_dma_data.maxburst = 8;
 
 	i2s->capture_dma_data.addr = res->start + SUN4I_I2S_FIFO_RX_REG;
