@@ -1,0 +1,325 @@
+Index: linux-5.3.13/sound/soc/sunxi/sun4i-i2s.c
+===================================================================
+--- linux-5.3.13.orig/sound/soc/sunxi/sun4i-i2s.c
++++ linux-5.3.13/sound/soc/sunxi/sun4i-i2s.c
+@@ -192,6 +192,7 @@ struct sun4i_i2s {
+ 	struct regmap_field	*field_rxchansel;
+ 
+ 	const struct sun4i_i2s_quirks	*variant;
++	bool codec_is_bus_master;
+ };
+ 
+ struct sun4i_i2s_clk_div {
+@@ -269,6 +270,21 @@ static bool sun4i_i2s_oversample_is_vali
+ 	return false;
+ }
+ 
++static int sun4i_i2s_set_dai_bclk_ratio(struct snd_soc_dai *dai,
++				      unsigned int ratio)
++{
++	struct sun4i_i2s *i2s = snd_soc_dai_get_drvdata(dai);
++	printk("sun4i_i2s_set_dai_bclk_ratio %d\n", ratio);
++	/* Set sync period */
++	if (i2s->variant->has_fmt_set_lrck_period){
++		regmap_update_bits(i2s->regmap, SUN4I_I2S_FMT0_REG,
++					 SUN8I_I2S_FMT0_LRCK_PERIOD_MASK,
++					 SUN8I_I2S_FMT0_LRCK_PERIOD(ratio/2));
++		printk("regmap_update_bits with LRCK_PERIOD %d\n", ratio/2);
++ }
++	return 0;
++}
++
+ static int sun4i_i2s_set_clk_rate(struct snd_soc_dai *dai,
+ 				  unsigned int rate,
+ 				  unsigned int word_size)
+@@ -316,19 +332,23 @@ static int sun4i_i2s_set_clk_rate(struct
+ 		return -EINVAL;
+ 	}
+ 
++	printk("i2s->mclk_freq %d rate %d word_size %d\n",i2s->mclk_freq, rate, word_size);
+ 	bclk_div = sun4i_i2s_get_bclk_div(i2s, i2s->mclk_freq,
+ 					  rate, word_size);
+ 	if (bclk_div < 0) {
+ 		dev_err(dai->dev, "Unsupported BCLK divider: %d\n", bclk_div);
+ 		return -EINVAL;
+ 	}
++	printk("bclk_div %d\n",bclk_div);
+ 
++	printk("oversample_rate %d clk_rate %d rate %d\n", oversample_rate, clk_rate, rate);
+ 	mclk_div = sun4i_i2s_get_mclk_div(i2s, oversample_rate,
+ 					  clk_rate, rate);
+ 	if (mclk_div < 0) {
+ 		dev_err(dai->dev, "Unsupported MCLK divider: %d\n", mclk_div);
+ 		return -EINVAL;
+ 	}
++	printk("mclk_div %d\n",mclk_div);
+ 
+ 	/* Adjust the clock division values if needed */
+ 	bclk_div += i2s->variant->bclk_offset;
+@@ -340,12 +360,6 @@ static int sun4i_i2s_set_clk_rate(struct
+ 
+ 	regmap_field_write(i2s->field_clkdiv_mclk_en, 1);
+ 
+-	/* Set sync period */
+-	if (i2s->variant->has_fmt_set_lrck_period)
+-		regmap_update_bits(i2s->regmap, SUN4I_I2S_FMT0_REG,
+-				   SUN8I_I2S_FMT0_LRCK_PERIOD_MASK,
+-				   SUN8I_I2S_FMT0_LRCK_PERIOD(32));
+-
+ 	return 0;
+ }
+ 
+@@ -390,8 +404,13 @@ static int sun4i_i2s_hw_params(struct sn
+ 	int sr, wss, channels;
+ 	u32 width;
+ 
++	printk("COOPS %s channels is %d, physical width is %d, width is %d, rate is %d, period size is %d\n",
++		__func__, params_channels(params), params_physical_width(params), params_width(params),
++		params_rate(params), params_period_size(params));
++
+ 	channels = params_channels(params);
+-	if (channels != 2) {
++	if ((channels > dai->driver->playback.channels_max) ||
++		(channels < dai->driver->playback.channels_min)) {
+ 		dev_err(dai->dev, "Unsupported number of channels: %d\n",
+ 			channels);
+ 		return -EINVAL;
+@@ -422,9 +441,27 @@ static int sun4i_i2s_hw_params(struct sn
+ 				   SUN8I_I2S_TX_CHAN_EN_MASK,
+ 				   SUN8I_I2S_TX_CHAN_EN(channels));
+ 
++	printk("params_physical_width(params) = %d\n",params_physical_width(params));
+ 	switch (params_physical_width(params)) {
+ 	case 16:
+ 		width = DMA_SLAVE_BUSWIDTH_2_BYTES;
++		/* Set significant bits in our FIFOs */
++		regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
++					 SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
++					 SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
++					 SUN4I_I2S_FIFO_CTRL_TX_MODE(1) |
++					 SUN4I_I2S_FIFO_CTRL_RX_MODE(1));
++
++		break;
++	case 24:
++	case 32:
++		width = DMA_SLAVE_BUSWIDTH_4_BYTES;
++		/* Set significant bits in our FIFOs */
++		regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
++				   SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
++				   SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
++				   SUN4I_I2S_FIFO_CTRL_TX_MODE(0) |
++				   SUN4I_I2S_FIFO_CTRL_RX_MODE(0));
+ 		break;
+ 	default:
+ 		dev_err(dai->dev, "Unsupported physical sample width: %d\n",
+@@ -444,8 +481,28 @@ static int sun4i_i2s_hw_params(struct sn
+ 	regmap_field_write(i2s->field_fmt_wss, wss);
+ 	regmap_field_write(i2s->field_fmt_sr, sr);
+ 
+-	return sun4i_i2s_set_clk_rate(dai, params_rate(params),
+-				      params_width(params));
++	if (!i2s->codec_is_bus_master) // SoC is I2S bus master
++		return sun4i_i2s_set_clk_rate(dai, params_rate(params),
++				params_width(params));
++
++	// Enable the first output line
++	regmap_update_bits(i2s->regmap, SUN4I_I2S_CTRL_REG,
++			   SUN4I_I2S_CTRL_SDO_EN_MASK,
++			   SUN4I_I2S_CTRL_SDO_EN(0));
++
++	// /* COOPS DEBUGGING FOR NOW */
++	// u32 reg_val = 0;
++	//
++	// printk("COOPS %s . Setting the following registers.\n", __func__);
++	// regmap_read(i2s->regmap, SUN4I_I2S_CTRL_REG, &reg_val);
++	// printk("SUN4I_I2S_CTRL_REG 0x%x\n", reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_FMT0_REG, &reg_val);
++	// printk("SUN4I_I2S_FMT0_REG 0x%x\n", reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG, &reg_val);
++	// printk("SUN4I_I2S_FIFO_CTRL_REG 0x%x\n", reg_val);
++	// regmap_read(i2s->regmap, SUN8I_I2S_TX_CHAN_SEL_REG, &reg_val);
++	// printk("SUN8I_I2S_TX_CHAN_SEL_REG 0x%x\n", reg_val);
++	return 0;
+ }
+ 
+ static int sun4i_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+@@ -456,6 +513,7 @@ static int sun4i_i2s_set_fmt(struct snd_
+ 	u32 bclk_polarity = SUN4I_I2S_FMT0_POLARITY_NORMAL;
+ 	u32 lrclk_polarity = SUN4I_I2S_FMT0_POLARITY_NORMAL;
+ 
++	printk("sun4i_i2s_set_fmt\n");
+ 	/* DAI Mode */
+ 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
+ 	case SND_SOC_DAIFMT_I2S:
+@@ -522,15 +580,21 @@ static int sun4i_i2s_set_fmt(struct snd_
+ 	regmap_field_write(i2s->field_fmt_lrclk, lrclk_polarity);
+ 
+ 	if (i2s->variant->has_slave_select_bit) {
++		printk("has_slave_select_bit\n");
++		printk("has_slave_select_bit\n");
++		printk("has_slave_select_bit\n");
++		printk("has_slave_select_bit\n");
+ 		/* DAI clock master masks */
+ 		switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+ 		case SND_SOC_DAIFMT_CBS_CFS:
+ 			/* BCLK and LRCLK master */
+ 			val = SUN4I_I2S_CTRL_MODE_MASTER;
++			i2s->codec_is_bus_master = false;
+ 			break;
+ 		case SND_SOC_DAIFMT_CBM_CFM:
+ 			/* BCLK and LRCLK slave */
+ 			val = SUN4I_I2S_CTRL_MODE_SLAVE;
++			i2s->codec_is_bus_master = true;
+ 			break;
+ 		default:
+ 			dev_err(dai->dev, "Unsupported slave setting: %d\n",
+@@ -551,10 +615,13 @@ static int sun4i_i2s_set_fmt(struct snd_
+ 			/* BCLK and LRCLK master */
+ 			val = SUN8I_I2S_CTRL_BCLK_OUT |
+ 				SUN8I_I2S_CTRL_LRCK_OUT;
++			i2s->codec_is_bus_master = false;
+ 			break;
+ 		case SND_SOC_DAIFMT_CBM_CFM:
++		printk("setting up master\n");
+ 			/* BCLK and LRCLK slave */
+ 			val = 0;
++			i2s->codec_is_bus_master = true;
+ 			break;
+ 		default:
+ 			dev_err(dai->dev, "Unsupported slave setting: %d\n",
+@@ -567,12 +634,26 @@ static int sun4i_i2s_set_fmt(struct snd_
+ 				   val);
+ 	}
+ 
+-	/* Set significant bits in our FIFOs */
+-	regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
+-			   SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
+-			   SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
+-			   SUN4I_I2S_FIFO_CTRL_TX_MODE(1) |
+-			   SUN4I_I2S_FIFO_CTRL_RX_MODE(1));
++	// /* Set significant bits in our FIFOs */
++	// regmap_update_bits(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG,
++	// 		   SUN4I_I2S_FIFO_CTRL_TX_MODE_MASK |
++	// 		   SUN4I_I2S_FIFO_CTRL_RX_MODE_MASK,
++	// 		   SUN4I_I2S_FIFO_CTRL_TX_MODE(1) |
++	// 		   SUN4I_I2S_FIFO_CTRL_RX_MODE(1));
++
++	 /* COOPS DEBUGGING FOR NOW */
++ 	u32 reg_val = 0;
++
++ 	printk("COOPS %s . Setting the following registers.\n", __func__);
++ 	regmap_read(i2s->regmap, SUN4I_I2S_CTRL_REG, &reg_val);
++ 	printk("SUN4I_I2S_CTRL_REG 0x%x\n", reg_val);
++ 	regmap_read(i2s->regmap, SUN4I_I2S_FMT0_REG, &reg_val);
++ 	printk("SUN4I_I2S_FMT0_REG 0x%x\n", reg_val);
++ 	regmap_read(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG, &reg_val);
++ 	printk("SUN4I_I2S_FIFO_CTRL_REG 0x%x\n", reg_val);
++ 	regmap_read(i2s->regmap, SUN8I_I2S_TX_CHAN_SEL_REG, &reg_val);
++ 	printk("SUN8I_I2S_TX_CHAN_SEL_REG 0x%x\n", reg_val);
++
+ 	return 0;
+ }
+ 
+@@ -671,6 +752,34 @@ static int sun4i_i2s_trigger(struct snd_
+ 	default:
+ 		return -EINVAL;
+ 	}
++	// {
++	// // COOPS DEBUGGING FOR NOW
++	// u32 reg_val = 0;
++	//
++	// printk("I2S Command State %d Audio Clock is %lu\n", cmd, clk_get_rate(i2s->mod_clk));
++	// regmap_read(i2s->regmap, SUN4I_I2S_CTRL_REG, &reg_val);
++	// printk("SUN4I_I2S_CTRL_REG 0x%x 0x%x\n", SUN4I_I2S_CTRL_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_FMT0_REG, &reg_val);
++	// printk("SUN4I_I2S_FMT0_REG 0x%x 0x%x\n", SUN4I_I2S_FMT0_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_FMT1_REG, &reg_val);
++	// printk("SUN4I_I2S_FMT1_REG 0x%x 0x%x\n", SUN4I_I2S_FMT1_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_FIFO_CTRL_REG, &reg_val);
++	// printk("SUN4I_I2S_FIFO_CTRL_REG 0x%x 0x%x\n", SUN4I_I2S_FIFO_CTRL_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_CLK_DIV_REG, &reg_val);
++	// printk("SUN4I_I2S_CLK_DIV_REG 0x%x 0x%x\n", SUN4I_I2S_CLK_DIV_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_FIFO_STA_REG, &reg_val);
++	// printk("SUN4I_I2S_FIFO_STA_REG 0x%x 0x%x\n", SUN4I_I2S_FIFO_STA_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_TX_CHAN_SEL_REG, &reg_val);
++	// printk("SUN4I_I2S_TX_CHAN_SEL_REG 0x%x 0x%x\n", SUN4I_I2S_TX_CHAN_SEL_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN4I_I2S_TX_CHAN_MAP_REG, &reg_val);
++	// printk("SUN4I_I2S_TX_CHAN_MAP_REG 0x%x 0x%x\n", SUN4I_I2S_TX_CHAN_MAP_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN8I_I2S_TX_CHAN_MAP_REG, &reg_val);
++	// printk("SUN8I_I2S_TX_CHAN_MAP_REG 0x%x 0x%x\n", SUN8I_I2S_TX_CHAN_MAP_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN8I_I2S_RX_CHAN_SEL_REG, &reg_val);
++	// printk("SUN8I_I2S_RX_CHAN_SEL_REG 0x%x 0x%x\n", SUN8I_I2S_RX_CHAN_SEL_REG, reg_val);
++	// regmap_read(i2s->regmap, SUN8I_I2S_RX_CHAN_MAP_REG, &reg_val);
++	// printk("SUN8I_I2S_RX_CHAN_MAP_REG 0x%x 0x%x\n", SUN8I_I2S_RX_CHAN_MAP_REG, reg_val);
++	// }
+ 
+ 	return 0;
+ }
+@@ -693,6 +802,7 @@ static const struct snd_soc_dai_ops sun4
+ 	.set_fmt	= sun4i_i2s_set_fmt,
+ 	.set_sysclk	= sun4i_i2s_set_sysclk,
+ 	.trigger	= sun4i_i2s_trigger,
++	.set_bclk_ratio	= sun4i_i2s_set_dai_bclk_ratio,
+ };
+ 
+ static int sun4i_i2s_dai_probe(struct snd_soc_dai *dai)
+@@ -715,14 +825,14 @@ static struct snd_soc_dai_driver sun4i_i
+ 		.channels_min = 2,
+ 		.channels_max = 2,
+ 		.rates = SNDRV_PCM_RATE_8000_192000,
+-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
++		.formats = (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE),
+ 	},
+ 	.playback = {
+ 		.stream_name = "Playback",
+ 		.channels_min = 2,
+ 		.channels_max = 2,
+ 		.rates = SNDRV_PCM_RATE_8000_192000,
+-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
++		.formats = (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE),
+ 	},
+ 	.ops = &sun4i_i2s_dai_ops,
+ 	.symmetric_rates = 1,
+@@ -849,6 +959,8 @@ static int sun4i_i2s_runtime_resume(stru
+ 	struct sun4i_i2s *i2s = dev_get_drvdata(dev);
+ 	int ret;
+ 
++	printk("sun4i_i2s_runtime_resume\n");
++
+ 	ret = clk_prepare_enable(i2s->bus_clk);
+ 	if (ret) {
+ 		dev_err(dev, "Failed to enable bus clock\n");
+@@ -868,10 +980,10 @@ static int sun4i_i2s_runtime_resume(stru
+ 	regmap_update_bits(i2s->regmap, SUN4I_I2S_CTRL_REG,
+ 			   SUN4I_I2S_CTRL_GL_EN, SUN4I_I2S_CTRL_GL_EN);
+ 
+-	/* Enable the first output line */
+-	regmap_update_bits(i2s->regmap, SUN4I_I2S_CTRL_REG,
+-			   SUN4I_I2S_CTRL_SDO_EN_MASK,
+-			   SUN4I_I2S_CTRL_SDO_EN(0));
++	// /* Enable the first output line */
++	// regmap_update_bits(i2s->regmap, SUN4I_I2S_CTRL_REG,
++	// 		   SUN4I_I2S_CTRL_SDO_EN_MASK,
++	// 		   SUN4I_I2S_CTRL_SDO_EN(1));
+ 
+ 	ret = clk_prepare_enable(i2s->mod_clk);
+ 	if (ret) {
+@@ -890,6 +1002,8 @@ static int sun4i_i2s_runtime_suspend(str
+ {
+ 	struct sun4i_i2s *i2s = dev_get_drvdata(dev);
+ 
++	printk("sun4i_i2s_runtime_suspend\n");
++
+ 	clk_disable_unprepare(i2s->mod_clk);
+ 
+ 	/* Disable our output lines */
+@@ -1135,8 +1249,7 @@ static int sun4i_i2s_probe(struct platfo
+ 		}
+ 	}
+ 
+-	i2s->playback_dma_data.addr = res->start +
+-					i2s->variant->reg_offset_txdata;
++	i2s->playback_dma_data.addr = res->start + i2s->variant->reg_offset_txdata;
+ 	i2s->playback_dma_data.maxburst = 8;
+ 
+ 	i2s->capture_dma_data.addr = res->start + SUN4I_I2S_FIFO_RX_REG;
