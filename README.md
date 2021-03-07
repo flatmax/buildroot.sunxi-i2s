@@ -1,4 +1,4 @@
-# NanoPi Neo4 buildroot system
+# NanoPi Neo buildroot system
 
 # Initial setup
 
@@ -7,8 +7,7 @@ Clone buildroot. For example :
 ```
 cd yourPath
 git clone git://git.busybox.net/buildroot buildroot.neo
-# if the HEAD is unstable, this works :
-#git checkout e3c86f5c9e466ed5135e824d6dcebcfd7f5ac1ab
+git checkout 34cce93adb06608992023c44fa3245d1f1a3deb4
 ```
 
 Make sure you have requirements :
@@ -19,14 +18,13 @@ sudo apt-get install -y patch texinfo wget git gawk curl lzma bc quilt
 
 Clone the NanoPi.Neo external buildroot tree :
 ```
-# this doesn't exist yet
-#git clone git@github.com:flatmax/NanoPi.Neo4.buildroot.external.git NanoPi.Neo
+git clone git@github.com:flatmax/buildroot.nanopi.neo.git
 ```
 
 # To make the system
 
 ```
-. NanoPi.Neo.buildroot.external/setup.sh yourPath/buildroot.neo
+. buildroot.nanopi.neo/setup.sh yourPath/buildroot.neo
 ```
 
 # ensure you have your buildroot net downloads directory setup
@@ -46,10 +44,10 @@ make
 Insert your sdcard into your drive and make sure it isn't mounted. Write the image to the disk.
 
 NOTE: The following command will overwrite any disk attached to /dev/sdg
-NOTE: Be super careful here!
+NOTE: It tries to guard against you overwriting your root partition of your build computer.
 
 ```
-sudo dd if=output/images/sdcard.img of=/dev/sdxx
+OF=/dev/sdb; rootDrive=`mount | grep " / " | grep $OF`; if [ -z $rootDrive ]; then sudo umount $OF[123456789]; sudo dd if=output/images/sdcard.img of=$OF; else echo you are trying to overwrite your root drive; fi
 ```
 
 # using
