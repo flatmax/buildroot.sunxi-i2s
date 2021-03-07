@@ -14,6 +14,7 @@ else
   CUSTOM_PATH=$DIR
   BR_REPO_PATH=$1
   BR_DEFCONFIG=nanopi_neo_defconfig
+  #BR_DEFCONFIG=friendlyarm_nanopi_neo_defconfig
   BR_AUDIOINJECTOR_DEFCONFIG=audioinjector_custom_defconfig
 
 #  BR_UBOOT_CMD=boot.cmd
