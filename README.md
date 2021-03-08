@@ -1,5 +1,9 @@
 # NanoPi Neo buildroot system
 
+# Thank you
+
+Thanks to Code Kipper for their initial inspiration on patching the sunxi i2s Linux driver and continued discussions.
+
 # Initial setup
 
 Clone buildroot. For example :
